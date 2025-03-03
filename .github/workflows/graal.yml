@@ -1,0 +1,67 @@
+name: Native Builds
+
+on:
+  workflow_run:
+    workflows: ["Java Build"]
+    types:
+      - completed
+
+jobs:
+  build:
+    name: Create Native Binary for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download JAR
+      uses: actions/download-artifact@v4
+      with:
+        name: java-build
+        run-id: ${{ github.event.workflow_run.id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up GraalVM 21
+      uses: graalvm/setup-graalvm@v1
+      with:
+        java-version: '21'
+        distribution: 'graalvm-community'
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        native-image-job-reports: 'true'
+
+    - name: Get JAR Name (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        $JAR_FILE = Get-ChildItem -Filter *.jar | Select-Object -First 1
+        echo "JAR_FILE=$($JAR_FILE.Name)" >> $env:GITHUB_ENV
+
+    - name: Get JAR Name (Other)
+      if: runner.os != 'Windows'
+      run: echo "JAR_FILE=$(ls *.jar | head -n 1)" >> $GITHUB_ENV
+
+    - name: Get Output Name (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        $BINARY_NAME = [System.IO.Path]::GetFileNameWithoutExtension("$env:JAR_FILE") + ".exe"
+        echo "BINARY_NAME=$BINARY_NAME" >> $env:GITHUB_ENV
+
+    - name: Get Output Name (Other)
+      if: runner.os != 'Windows'
+      run: echo "BINARY_NAME=${JAR_FILE%.jar}" >> $GITHUB_ENV
+
+    - name: Build Native Binary (Windows)
+      if: runner.os == 'Windows'
+      run: native-image -jar "$env:JAR_FILE" -march=compatibility -O3 --strict-image-heap --no-fallback --initialize-at-build-time
+      
+    - name: Build Native Binary (Other)
+      if: runner.os != 'Windows'
+      run: native-image -jar "$JAR_FILE" -march=compatibility -O3 --strict-image-heap --no-fallback --initialize-at-build-time
+
+    - name: Upload Native Binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-build-${{ matrix.os }}
+        path: ${{ env.BINARY_NAME }}
