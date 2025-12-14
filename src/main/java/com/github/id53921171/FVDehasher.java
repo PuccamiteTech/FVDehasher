@@ -8,8 +8,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,8 +34,14 @@ public final class FVDehasher
         final ExecutorService service = Executors.newFixedThreadPool(
                 Runtime.getRuntime().availableProcessors());
 
-        for (String path : new File(System.getProperty(
-                "user.dir")).list())
+        // If a user deliberately passes strings that resolve
+        // identically or invalidly, that's on them.
+        final Set<String> paths = new HashSet<>(Arrays.asList(args));
+
+        paths.addAll(Arrays.asList(new File(
+                System.getProperty("user.dir")).list()));
+
+        for (String path : paths)
         {
             final String LOWER_PATH = path.toLowerCase();
 
